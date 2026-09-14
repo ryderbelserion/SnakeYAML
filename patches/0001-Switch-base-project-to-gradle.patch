@@ -1,0 +1,1226 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ryder Belserion <contact@ryderbelserion.com>
+Date: Mon, 14 Sep 2026 17:58:33 -0400
+Subject: [PATCH] Switch base project to gradle
+
+
+diff --git a/.devcontainer/Devcontainer.md b/.devcontainer/Devcontainer.md
+deleted file mode 100644
+index 09af6f31286990d5378d94d354b955c7fa9f7930..0000000000000000000000000000000000000000
+--- a/.devcontainer/Devcontainer.md
++++ /dev/null
+@@ -1,14 +0,0 @@
+-# Devcontainers
+-
+-
+-
+-## Linux
+-
+-Because of user [restrictions](https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user), the container cannot be effectively used in Linux 
+-because the files will be owned by root (but the current user is `vscode`)
+-
+-***A solution is welcome !***
+-
+-## Mac
+-
+-Launch VS Code and `Reopen in container`
+\ No newline at end of file
+diff --git a/.devcontainer/Dockerfile b/.devcontainer/Dockerfile
+deleted file mode 100644
+index 5e69f83a633c9464815ce146002b2d97426baeb3..0000000000000000000000000000000000000000
+--- a/.devcontainer/Dockerfile
++++ /dev/null
+@@ -1,56 +0,0 @@
+-FROM mcr.microsoft.com/devcontainers/java:17-jdk-bookworm
+-
+-################### Docker-from-Docker installation ###################
+-
+-# Install required packages
+-RUN apt-get update \
+-    && apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+-
+-# Import the Docker repository GPG key
+-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+-
+-# Set permissions on GPG key
+-RUN chmod a+r /usr/share/keyrings/docker-archive-keyring.gpg
+-
+-# Add the Docker repository to the APT sources
+-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+-
+-# Update package lists and install Docker
+-RUN apt-get update \
+-    && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+-    && rm -rf /var/lib/apt/lists/*
+-
+-# https://github.com/microsoft/vscode-dev-containers/tree/main/containers/docker-from-docker
+-ARG NONROOT_USER=vscode
+-
+-RUN echo -e "#!/bin/sh\n\
+-    sudoIf() { if [ \"\$(id -u)\" -ne 0 ]; then sudo \"\$@\"; else \"\$@\"; fi }\n\
+-    SOCKET_GID=\$(stat -c '%g' /var/run/docker.sock) \n\
+-    if [ \"${SOCKET_GID}\" != '0' ]; then\n\
+-        if [ \"\$(cat /etc/group | grep :\${SOCKET_GID}:)\" = '' ]; then sudoIf groupadd --gid \${SOCKET_GID} docker-host; fi \n\
+-        if [ \"\$(id ${NONROOT_USER} | grep -E \"groups=.*(=|,)\${SOCKET_GID}\(\")\" = '' ]; then sudoIf usermod -aG \${SOCKET_GID} ${NONROOT_USER}; fi\n\
+-    fi\n\
+-    exec \"\$@\"" > /usr/local/share/docker-init.sh \
+-    && chmod +x /usr/local/share/docker-init.sh
+-
+-############## End Docker-from-Docker section #############
+-
+-################### Maven configuration ##################
+-
+-# Establish .m2 folder and set ownership
+-RUN mkdir -p /home/vscode/.m2/repository 
+-RUN chown -R vscode:vscode /home/vscode/.m2
+-
+-################### End Maven section ####################
+-
+-######### More Docker-from-Docker recommendations ########
+-
+-# https://github.com/microsoft/vscode-dev-containers/tree/main/containers/docker-from-docker
+-# VS Code overrides ENTRYPOINT and CMD when executing `docker run` by default.
+-# Setting the ENTRYPOINT to docker-init.sh will configure non-root access to
+-# the Docker socket if "overrideCommand": false is set in devcontainer.json.
+-# The script will also execute CMD if you need to alter startup behaviors.
+-ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
+-CMD [ "sleep", "infinity" ]
+-
+-######### End Docker-from-Docker recommendations #########
+\ No newline at end of file
+diff --git a/.devcontainer/jdk17/devcontainer.json b/.devcontainer/jdk17/devcontainer.json
+deleted file mode 100644
+index b5af16b163b6cdd15f9ee298e5014e9e35c0b1d7..0000000000000000000000000000000000000000
+--- a/.devcontainer/jdk17/devcontainer.json
++++ /dev/null
+@@ -1,36 +0,0 @@
+-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+-// README at: https://github.com/devcontainers/templates/tree/main/src/java
+-{
+-	"name": "jdk17",
+-	// Explicitly declaring which source-code folder to mount and where to mount it in the container
+-	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+-	"workspaceFolder": "/workspace",
+-	"build": {
+-		// https://containers.dev/guide/dockerfile
+-		"dockerfile": "../Dockerfile"
+-	},
+-	"features": {
+-	},
+-	"mounts": [
+-		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind", // Binding the host docker socket to the container
+-		"source=m2volume,target=/home/vscode/.m2/repository,type=volume" // Establishing a persistent volume for maven local repository downloads
+-	],
+-	// Docker-from-Docker recommendations
+-	// Per https://github.com/microsoft/vscode-dev-containers/tree/main/containers/docker-from-docker
+-	"overrideCommand": false,
+-	"remoteUser": "vscode",
+-	"runArgs": ["--init"],
+-	// End of Docker-from-Docker recommendations
+-	"containerEnv": {
+-		// You can specify environment variables here, which will be available to the application via System.getenv()
+-		"CUSTOM_PROP": "Team"
+-	},
+-	"postStartCommand": "./mvnw clean package",
+-	"customizations": {
+-		"vscode": {
+-			"extensions": [
+-				"vscjava.vscode-java-pack"
+-			]
+-		}
+-	}
+-}
+diff --git a/.github/workflows/CI.yml b/.github/workflows/CI.yml
+deleted file mode 100644
+index 46ecbcd72756b61e61e1ba321aa1180c32ad98c6..0000000000000000000000000000000000000000
+--- a/.github/workflows/CI.yml
++++ /dev/null
+@@ -1,47 +0,0 @@
+-# Copyright (c) 2008, SnakeYAML
+-
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-name: Java CI with Maven
+-
+-on:
+-  push:
+-    branches: [master]
+-  pull_request:
+-    branches: [master]
+-
+-jobs:
+-  build:
+-    runs-on: ubuntu-latest
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        jdk: [ '11', '17' ]
+-        include: 
+-          - jdk: '11'
+-            profile: -Pwith-java11-tests
+-          - jdk: '17'
+-            profile: -Pwith-java11-tests
+-
+-    name: jdk ${{ matrix.jdk }}
+-
+-    steps:
+-      - uses: actions/checkout@v3
+-      - name: Set up JDK ${{ matrix.jdk }}
+-        uses: actions/setup-java@v3
+-        with:
+-          distribution: 'temurin'
+-          java-version: ${{ matrix.jdk }}
+-          cache: 'maven'
+-      - name: Build with Maven
+-        run: ./mvnw -V -B ${{ matrix.profile }} verify --file pom.xml
+diff --git a/.mvn/wrapper/maven-wrapper.properties b/.mvn/wrapper/maven-wrapper.properties
+deleted file mode 100644
+index 0f7e194ee0e8f0bcbc850001b86a38f1dc30c67d..0000000000000000000000000000000000000000
+--- a/.mvn/wrapper/maven-wrapper.properties
++++ /dev/null
+@@ -1,19 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one
+-# or more contributor license agreements.  See the NOTICE file
+-# distributed with this work for additional information
+-# regarding copyright ownership.  The ASF licenses this file
+-# to you under the Apache License, Version 2.0 (the
+-# "License"); you may not use this file except in compliance
+-# with the License.  You may obtain a copy of the License at
+-#
+-#   http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing,
+-# software distributed under the License is distributed on an
+-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-# KIND, either express or implied.  See the License for the
+-# specific language governing permissions and limitations
+-# under the License.
+-wrapperVersion=3.3.2
+-distributionType=only-script
+-distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.8.4/apache-maven-3.8.4-bin.zip
+diff --git a/build.gradle.kts b/build.gradle.kts
+new file mode 100644
+index 0000000000000000000000000000000000000000..2686ae1d5a5f5ea8a60bebfb0d8fee370b6569f9
+--- /dev/null
++++ b/build.gradle.kts
+@@ -0,0 +1,18 @@
++plugins {
++    `config-publish`
++    `java-plugin`
++}
++
++dependencies {
++    testImplementation("junit:junit:4.13.2")
++    testImplementation("org.apache.velocity:velocity-engine-core:2.4.1")
++    testImplementation("joda-time:joda-time:2.11.1")
++    testImplementation("org.projectlombok:lombok:1.18.42")
++
++    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.22.1") {
++        exclude(group = "org.yaml", module = "snakeyaml")
++    }
++
++    testImplementation("org.openjdk.jmh:jmh-core:1.36")
++    testImplementation("org.openjdk.jmh:jmh-generator-annprocess:1.36")
++}
+\ No newline at end of file
+diff --git a/docker-run-jdk11.sh b/docker-run-jdk11.sh
+deleted file mode 100755
+index 5c27882726ecab51741336efe4e602c25727df87..0000000000000000000000000000000000000000
+--- a/docker-run-jdk11.sh
++++ /dev/null
+@@ -1,2 +0,0 @@
+-#!/usr/bin/env bash
+-./run-in-docker.sh eclipse-temurin:11 $@
+diff --git a/docker-run-jdk17.sh b/docker-run-jdk17.sh
+deleted file mode 100755
+index 058e4b115a95bc109c99d88f32e4ed1602bcbb58..0000000000000000000000000000000000000000
+--- a/docker-run-jdk17.sh
++++ /dev/null
+@@ -1,2 +0,0 @@
+-#!/usr/bin/env bash
+-./run-in-docker.sh eclipse-temurin:17 $@
+diff --git a/docker-run-jdk21.sh b/docker-run-jdk21.sh
+deleted file mode 100755
+index cc2a55d7984300a5fb96ae1bee0ce77e5882a318..0000000000000000000000000000000000000000
+--- a/docker-run-jdk21.sh
++++ /dev/null
+@@ -1,2 +0,0 @@
+-#!/usr/bin/env bash
+-./run-in-docker.sh eclipse-temurin:21 $@
+diff --git a/docker-run-jdk25.sh b/docker-run-jdk25.sh
+deleted file mode 100755
+index fdbbae00e2dc4b0815f604917689e75c1d925f57..0000000000000000000000000000000000000000
+--- a/docker-run-jdk25.sh
++++ /dev/null
+@@ -1,2 +0,0 @@
+-#!/usr/bin/env bash
+-./run-in-docker.sh eclipse-temurin:25 $@
+diff --git a/mvnw b/mvnw
+deleted file mode 100755
+index 19529ddf8c6eaa08c5c75ff80652d21ce4b72f8c..0000000000000000000000000000000000000000
+--- a/mvnw
++++ /dev/null
+@@ -1,259 +0,0 @@
+-#!/bin/sh
+-# ----------------------------------------------------------------------------
+-# Licensed to the Apache Software Foundation (ASF) under one
+-# or more contributor license agreements.  See the NOTICE file
+-# distributed with this work for additional information
+-# regarding copyright ownership.  The ASF licenses this file
+-# to you under the Apache License, Version 2.0 (the
+-# "License"); you may not use this file except in compliance
+-# with the License.  You may obtain a copy of the License at
+-#
+-#    http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing,
+-# software distributed under the License is distributed on an
+-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-# KIND, either express or implied.  See the License for the
+-# specific language governing permissions and limitations
+-# under the License.
+-# ----------------------------------------------------------------------------
+-
+-# ----------------------------------------------------------------------------
+-# Apache Maven Wrapper startup batch script, version 3.3.2
+-#
+-# Optional ENV vars
+-# -----------------
+-#   JAVA_HOME - location of a JDK home dir, required when download maven via java source
+-#   MVNW_REPOURL - repo url base for downloading maven distribution
+-#   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
+-#   MVNW_VERBOSE - true: enable verbose log; debug: trace the mvnw script; others: silence the output
+-# ----------------------------------------------------------------------------
+-
+-set -euf
+-[ "${MVNW_VERBOSE-}" != debug ] || set -x
+-
+-# OS specific support.
+-native_path() { printf %s\\n "$1"; }
+-case "$(uname)" in
+-CYGWIN* | MINGW*)
+-  [ -z "${JAVA_HOME-}" ] || JAVA_HOME="$(cygpath --unix "$JAVA_HOME")"
+-  native_path() { cygpath --path --windows "$1"; }
+-  ;;
+-esac
+-
+-# set JAVACMD and JAVACCMD
+-set_java_home() {
+-  # For Cygwin and MinGW, ensure paths are in Unix format before anything is touched
+-  if [ -n "${JAVA_HOME-}" ]; then
+-    if [ -x "$JAVA_HOME/jre/sh/java" ]; then
+-      # IBM's JDK on AIX uses strange locations for the executables
+-      JAVACMD="$JAVA_HOME/jre/sh/java"
+-      JAVACCMD="$JAVA_HOME/jre/sh/javac"
+-    else
+-      JAVACMD="$JAVA_HOME/bin/java"
+-      JAVACCMD="$JAVA_HOME/bin/javac"
+-
+-      if [ ! -x "$JAVACMD" ] || [ ! -x "$JAVACCMD" ]; then
+-        echo "The JAVA_HOME environment variable is not defined correctly, so mvnw cannot run." >&2
+-        echo "JAVA_HOME is set to \"$JAVA_HOME\", but \"\$JAVA_HOME/bin/java\" or \"\$JAVA_HOME/bin/javac\" does not exist." >&2
+-        return 1
+-      fi
+-    fi
+-  else
+-    JAVACMD="$(
+-      'set' +e
+-      'unset' -f command 2>/dev/null
+-      'command' -v java
+-    )" || :
+-    JAVACCMD="$(
+-      'set' +e
+-      'unset' -f command 2>/dev/null
+-      'command' -v javac
+-    )" || :
+-
+-    if [ ! -x "${JAVACMD-}" ] || [ ! -x "${JAVACCMD-}" ]; then
+-      echo "The java/javac command does not exist in PATH nor is JAVA_HOME set, so mvnw cannot run." >&2
+-      return 1
+-    fi
+-  fi
+-}
+-
+-# hash string like Java String::hashCode
+-hash_string() {
+-  str="${1:-}" h=0
+-  while [ -n "$str" ]; do
+-    char="${str%"${str#?}"}"
+-    h=$(((h * 31 + $(LC_CTYPE=C printf %d "'$char")) % 4294967296))
+-    str="${str#?}"
+-  done
+-  printf %x\\n $h
+-}
+-
+-verbose() { :; }
+-[ "${MVNW_VERBOSE-}" != true ] || verbose() { printf %s\\n "${1-}"; }
+-
+-die() {
+-  printf %s\\n "$1" >&2
+-  exit 1
+-}
+-
+-trim() {
+-  # MWRAPPER-139:
+-  #   Trims trailing and leading whitespace, carriage returns, tabs, and linefeeds.
+-  #   Needed for removing poorly interpreted newline sequences when running in more
+-  #   exotic environments such as mingw bash on Windows.
+-  printf "%s" "${1}" | tr -d '[:space:]'
+-}
+-
+-# parse distributionUrl and optional distributionSha256Sum, requires .mvn/wrapper/maven-wrapper.properties
+-while IFS="=" read -r key value; do
+-  case "${key-}" in
+-  distributionUrl) distributionUrl=$(trim "${value-}") ;;
+-  distributionSha256Sum) distributionSha256Sum=$(trim "${value-}") ;;
+-  esac
+-done <"${0%/*}/.mvn/wrapper/maven-wrapper.properties"
+-[ -n "${distributionUrl-}" ] || die "cannot read distributionUrl property in ${0%/*}/.mvn/wrapper/maven-wrapper.properties"
+-
+-case "${distributionUrl##*/}" in
+-maven-mvnd-*bin.*)
+-  MVN_CMD=mvnd.sh _MVNW_REPO_PATTERN=/maven/mvnd/
+-  case "${PROCESSOR_ARCHITECTURE-}${PROCESSOR_ARCHITEW6432-}:$(uname -a)" in
+-  *AMD64:CYGWIN* | *AMD64:MINGW*) distributionPlatform=windows-amd64 ;;
+-  :Darwin*x86_64) distributionPlatform=darwin-amd64 ;;
+-  :Darwin*arm64) distributionPlatform=darwin-aarch64 ;;
+-  :Linux*x86_64*) distributionPlatform=linux-amd64 ;;
+-  *)
+-    echo "Cannot detect native platform for mvnd on $(uname)-$(uname -m), use pure java version" >&2
+-    distributionPlatform=linux-amd64
+-    ;;
+-  esac
+-  distributionUrl="${distributionUrl%-bin.*}-$distributionPlatform.zip"
+-  ;;
+-maven-mvnd-*) MVN_CMD=mvnd.sh _MVNW_REPO_PATTERN=/maven/mvnd/ ;;
+-*) MVN_CMD="mvn${0##*/mvnw}" _MVNW_REPO_PATTERN=/org/apache/maven/ ;;
+-esac
+-
+-# apply MVNW_REPOURL and calculate MAVEN_HOME
+-# maven home pattern: ~/.m2/wrapper/dists/{apache-maven-<version>,maven-mvnd-<version>-<platform>}/<hash>
+-[ -z "${MVNW_REPOURL-}" ] || distributionUrl="$MVNW_REPOURL$_MVNW_REPO_PATTERN${distributionUrl#*"$_MVNW_REPO_PATTERN"}"
+-distributionUrlName="${distributionUrl##*/}"
+-distributionUrlNameMain="${distributionUrlName%.*}"
+-distributionUrlNameMain="${distributionUrlNameMain%-bin}"
+-MAVEN_USER_HOME="${MAVEN_USER_HOME:-${HOME}/.m2}"
+-MAVEN_HOME="${MAVEN_USER_HOME}/wrapper/dists/${distributionUrlNameMain-}/$(hash_string "$distributionUrl")"
+-
+-exec_maven() {
+-  unset MVNW_VERBOSE MVNW_USERNAME MVNW_PASSWORD MVNW_REPOURL || :
+-  exec "$MAVEN_HOME/bin/$MVN_CMD" "$@" || die "cannot exec $MAVEN_HOME/bin/$MVN_CMD"
+-}
+-
+-if [ -d "$MAVEN_HOME" ]; then
+-  verbose "found existing MAVEN_HOME at $MAVEN_HOME"
+-  exec_maven "$@"
+-fi
+-
+-case "${distributionUrl-}" in
+-*?-bin.zip | *?maven-mvnd-?*-?*.zip) ;;
+-*) die "distributionUrl is not valid, must match *-bin.zip or maven-mvnd-*.zip, but found '${distributionUrl-}'" ;;
+-esac
+-
+-# prepare tmp dir
+-if TMP_DOWNLOAD_DIR="$(mktemp -d)" && [ -d "$TMP_DOWNLOAD_DIR" ]; then
+-  clean() { rm -rf -- "$TMP_DOWNLOAD_DIR"; }
+-  trap clean HUP INT TERM EXIT
+-else
+-  die "cannot create temp dir"
+-fi
+-
+-mkdir -p -- "${MAVEN_HOME%/*}"
+-
+-# Download and Install Apache Maven
+-verbose "Couldn't find MAVEN_HOME, downloading and installing it ..."
+-verbose "Downloading from: $distributionUrl"
+-verbose "Downloading to: $TMP_DOWNLOAD_DIR/$distributionUrlName"
+-
+-# select .zip or .tar.gz
+-if ! command -v unzip >/dev/null; then
+-  distributionUrl="${distributionUrl%.zip}.tar.gz"
+-  distributionUrlName="${distributionUrl##*/}"
+-fi
+-
+-# verbose opt
+-__MVNW_QUIET_WGET=--quiet __MVNW_QUIET_CURL=--silent __MVNW_QUIET_UNZIP=-q __MVNW_QUIET_TAR=''
+-[ "${MVNW_VERBOSE-}" != true ] || __MVNW_QUIET_WGET='' __MVNW_QUIET_CURL='' __MVNW_QUIET_UNZIP='' __MVNW_QUIET_TAR=v
+-
+-# normalize http auth
+-case "${MVNW_PASSWORD:+has-password}" in
+-'') MVNW_USERNAME='' MVNW_PASSWORD='' ;;
+-has-password) [ -n "${MVNW_USERNAME-}" ] || MVNW_USERNAME='' MVNW_PASSWORD='' ;;
+-esac
+-
+-if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
+-  verbose "Found wget ... using wget"
+-  wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget: Failed to fetch $distributionUrl"
+-elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
+-  verbose "Found curl ... using curl"
+-  curl ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl: Failed to fetch $distributionUrl"
+-elif set_java_home; then
+-  verbose "Falling back to use Java to download"
+-  javaSource="$TMP_DOWNLOAD_DIR/Downloader.java"
+-  targetZip="$TMP_DOWNLOAD_DIR/$distributionUrlName"
+-  cat >"$javaSource" <<-END
+-	public class Downloader extends java.net.Authenticator
+-	{
+-	  protected java.net.PasswordAuthentication getPasswordAuthentication()
+-	  {
+-	    return new java.net.PasswordAuthentication( System.getenv( "MVNW_USERNAME" ), System.getenv( "MVNW_PASSWORD" ).toCharArray() );
+-	  }
+-	  public static void main( String[] args ) throws Exception
+-	  {
+-	    setDefault( new Downloader() );
+-	    java.nio.file.Files.copy( java.net.URI.create( args[0] ).toURL().openStream(), java.nio.file.Paths.get( args[1] ).toAbsolutePath().normalize() );
+-	  }
+-	}
+-	END
+-  # For Cygwin/MinGW, switch paths to Windows format before running javac and java
+-  verbose " - Compiling Downloader.java ..."
+-  "$(native_path "$JAVACCMD")" "$(native_path "$javaSource")" || die "Failed to compile Downloader.java"
+-  verbose " - Running Downloader.java ..."
+-  "$(native_path "$JAVACMD")" -cp "$(native_path "$TMP_DOWNLOAD_DIR")" Downloader "$distributionUrl" "$(native_path "$targetZip")"
+-fi
+-
+-# If specified, validate the SHA-256 sum of the Maven distribution zip file
+-if [ -n "${distributionSha256Sum-}" ]; then
+-  distributionSha256Result=false
+-  if [ "$MVN_CMD" = mvnd.sh ]; then
+-    echo "Checksum validation is not supported for maven-mvnd." >&2
+-    echo "Please disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties." >&2
+-    exit 1
+-  elif command -v sha256sum >/dev/null; then
+-    if echo "$distributionSha256Sum  $TMP_DOWNLOAD_DIR/$distributionUrlName" | sha256sum -c >/dev/null 2>&1; then
+-      distributionSha256Result=true
+-    fi
+-  elif command -v shasum >/dev/null; then
+-    if echo "$distributionSha256Sum  $TMP_DOWNLOAD_DIR/$distributionUrlName" | shasum -a 256 -c >/dev/null 2>&1; then
+-      distributionSha256Result=true
+-    fi
+-  else
+-    echo "Checksum validation was requested but neither 'sha256sum' or 'shasum' are available." >&2
+-    echo "Please install either command, or disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties." >&2
+-    exit 1
+-  fi
+-  if [ $distributionSha256Result = false ]; then
+-    echo "Error: Failed to validate Maven distribution SHA-256, your Maven distribution might be compromised." >&2
+-    echo "If you updated your Maven version, you need to update the specified distributionSha256Sum property." >&2
+-    exit 1
+-  fi
+-fi
+-
+-# unzip and move
+-if command -v unzip >/dev/null; then
+-  unzip ${__MVNW_QUIET_UNZIP:+"$__MVNW_QUIET_UNZIP"} "$TMP_DOWNLOAD_DIR/$distributionUrlName" -d "$TMP_DOWNLOAD_DIR" || die "failed to unzip"
+-else
+-  tar xzf${__MVNW_QUIET_TAR:+"$__MVNW_QUIET_TAR"} "$TMP_DOWNLOAD_DIR/$distributionUrlName" -C "$TMP_DOWNLOAD_DIR" || die "failed to untar"
+-fi
+-printf %s\\n "$distributionUrl" >"$TMP_DOWNLOAD_DIR/$distributionUrlNameMain/mvnw.url"
+-mv -- "$TMP_DOWNLOAD_DIR/$distributionUrlNameMain" "$MAVEN_HOME" || [ -d "$MAVEN_HOME" ] || die "fail to move MAVEN_HOME"
+-
+-clean || :
+-exec_maven "$@"
+diff --git a/mvnw.cmd b/mvnw.cmd
+deleted file mode 100644
+index b150b91ed5005191af94bd95320b04d8148b8a53..0000000000000000000000000000000000000000
+--- a/mvnw.cmd
++++ /dev/null
+@@ -1,149 +0,0 @@
+-<# : batch portion
+-@REM ----------------------------------------------------------------------------
+-@REM Licensed to the Apache Software Foundation (ASF) under one
+-@REM or more contributor license agreements.  See the NOTICE file
+-@REM distributed with this work for additional information
+-@REM regarding copyright ownership.  The ASF licenses this file
+-@REM to you under the Apache License, Version 2.0 (the
+-@REM "License"); you may not use this file except in compliance
+-@REM with the License.  You may obtain a copy of the License at
+-@REM
+-@REM    http://www.apache.org/licenses/LICENSE-2.0
+-@REM
+-@REM Unless required by applicable law or agreed to in writing,
+-@REM software distributed under the License is distributed on an
+-@REM "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-@REM KIND, either express or implied.  See the License for the
+-@REM specific language governing permissions and limitations
+-@REM under the License.
+-@REM ----------------------------------------------------------------------------
+-
+-@REM ----------------------------------------------------------------------------
+-@REM Apache Maven Wrapper startup batch script, version 3.3.2
+-@REM
+-@REM Optional ENV vars
+-@REM   MVNW_REPOURL - repo url base for downloading maven distribution
+-@REM   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
+-@REM   MVNW_VERBOSE - true: enable verbose log; others: silence the output
+-@REM ----------------------------------------------------------------------------
+-
+-@IF "%__MVNW_ARG0_NAME__%"=="" (SET __MVNW_ARG0_NAME__=%~nx0)
+-@SET __MVNW_CMD__=
+-@SET __MVNW_ERROR__=
+-@SET __MVNW_PSMODULEP_SAVE=%PSModulePath%
+-@SET PSModulePath=
+-@FOR /F "usebackq tokens=1* delims==" %%A IN (`powershell -noprofile "& {$scriptDir='%~dp0'; $script='%__MVNW_ARG0_NAME__%'; icm -ScriptBlock ([Scriptblock]::Create((Get-Content -Raw '%~f0'))) -NoNewScope}"`) DO @(
+-  IF "%%A"=="MVN_CMD" (set __MVNW_CMD__=%%B) ELSE IF "%%B"=="" (echo %%A) ELSE (echo %%A=%%B)
+-)
+-@SET PSModulePath=%__MVNW_PSMODULEP_SAVE%
+-@SET __MVNW_PSMODULEP_SAVE=
+-@SET __MVNW_ARG0_NAME__=
+-@SET MVNW_USERNAME=
+-@SET MVNW_PASSWORD=
+-@IF NOT "%__MVNW_CMD__%"=="" (%__MVNW_CMD__% %*)
+-@echo Cannot start maven from wrapper >&2 && exit /b 1
+-@GOTO :EOF
+-: end batch / begin powershell #>
+-
+-$ErrorActionPreference = "Stop"
+-if ($env:MVNW_VERBOSE -eq "true") {
+-  $VerbosePreference = "Continue"
+-}
+-
+-# calculate distributionUrl, requires .mvn/wrapper/maven-wrapper.properties
+-$distributionUrl = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionUrl
+-if (!$distributionUrl) {
+-  Write-Error "cannot read distributionUrl property in $scriptDir/.mvn/wrapper/maven-wrapper.properties"
+-}
+-
+-switch -wildcard -casesensitive ( $($distributionUrl -replace '^.*/','') ) {
+-  "maven-mvnd-*" {
+-    $USE_MVND = $true
+-    $distributionUrl = $distributionUrl -replace '-bin\.[^.]*$',"-windows-amd64.zip"
+-    $MVN_CMD = "mvnd.cmd"
+-    break
+-  }
+-  default {
+-    $USE_MVND = $false
+-    $MVN_CMD = $script -replace '^mvnw','mvn'
+-    break
+-  }
+-}
+-
+-# apply MVNW_REPOURL and calculate MAVEN_HOME
+-# maven home pattern: ~/.m2/wrapper/dists/{apache-maven-<version>,maven-mvnd-<version>-<platform>}/<hash>
+-if ($env:MVNW_REPOURL) {
+-  $MVNW_REPO_PATTERN = if ($USE_MVND) { "/org/apache/maven/" } else { "/maven/mvnd/" }
+-  $distributionUrl = "$env:MVNW_REPOURL$MVNW_REPO_PATTERN$($distributionUrl -replace '^.*'+$MVNW_REPO_PATTERN,'')"
+-}
+-$distributionUrlName = $distributionUrl -replace '^.*/',''
+-$distributionUrlNameMain = $distributionUrlName -replace '\.[^.]*$','' -replace '-bin$',''
+-$MAVEN_HOME_PARENT = "$HOME/.m2/wrapper/dists/$distributionUrlNameMain"
+-if ($env:MAVEN_USER_HOME) {
+-  $MAVEN_HOME_PARENT = "$env:MAVEN_USER_HOME/wrapper/dists/$distributionUrlNameMain"
+-}
+-$MAVEN_HOME_NAME = ([System.Security.Cryptography.MD5]::Create().ComputeHash([byte[]][char[]]$distributionUrl) | ForEach-Object {$_.ToString("x2")}) -join ''
+-$MAVEN_HOME = "$MAVEN_HOME_PARENT/$MAVEN_HOME_NAME"
+-
+-if (Test-Path -Path "$MAVEN_HOME" -PathType Container) {
+-  Write-Verbose "found existing MAVEN_HOME at $MAVEN_HOME"
+-  Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+-  exit $?
+-}
+-
+-if (! $distributionUrlNameMain -or ($distributionUrlName -eq $distributionUrlNameMain)) {
+-  Write-Error "distributionUrl is not valid, must end with *-bin.zip, but found $distributionUrl"
+-}
+-
+-# prepare tmp dir
+-$TMP_DOWNLOAD_DIR_HOLDER = New-TemporaryFile
+-$TMP_DOWNLOAD_DIR = New-Item -Itemtype Directory -Path "$TMP_DOWNLOAD_DIR_HOLDER.dir"
+-$TMP_DOWNLOAD_DIR_HOLDER.Delete() | Out-Null
+-trap {
+-  if ($TMP_DOWNLOAD_DIR.Exists) {
+-    try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+-    catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+-  }
+-}
+-
+-New-Item -Itemtype Directory -Path "$MAVEN_HOME_PARENT" -Force | Out-Null
+-
+-# Download and Install Apache Maven
+-Write-Verbose "Couldn't find MAVEN_HOME, downloading and installing it ..."
+-Write-Verbose "Downloading from: $distributionUrl"
+-Write-Verbose "Downloading to: $TMP_DOWNLOAD_DIR/$distributionUrlName"
+-
+-$webclient = New-Object System.Net.WebClient
+-if ($env:MVNW_USERNAME -and $env:MVNW_PASSWORD) {
+-  $webclient.Credentials = New-Object System.Net.NetworkCredential($env:MVNW_USERNAME, $env:MVNW_PASSWORD)
+-}
+-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+-$webclient.DownloadFile($distributionUrl, "$TMP_DOWNLOAD_DIR/$distributionUrlName") | Out-Null
+-
+-# If specified, validate the SHA-256 sum of the Maven distribution zip file
+-$distributionSha256Sum = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionSha256Sum
+-if ($distributionSha256Sum) {
+-  if ($USE_MVND) {
+-    Write-Error "Checksum validation is not supported for maven-mvnd. `nPlease disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties."
+-  }
+-  Import-Module $PSHOME\Modules\Microsoft.PowerShell.Utility -Function Get-FileHash
+-  if ((Get-FileHash "$TMP_DOWNLOAD_DIR/$distributionUrlName" -Algorithm SHA256).Hash.ToLower() -ne $distributionSha256Sum) {
+-    Write-Error "Error: Failed to validate Maven distribution SHA-256, your Maven distribution might be compromised. If you updated your Maven version, you need to update the specified distributionSha256Sum property."
+-  }
+-}
+-
+-# unzip and move
+-Expand-Archive "$TMP_DOWNLOAD_DIR/$distributionUrlName" -DestinationPath "$TMP_DOWNLOAD_DIR" | Out-Null
+-Rename-Item -Path "$TMP_DOWNLOAD_DIR/$distributionUrlNameMain" -NewName $MAVEN_HOME_NAME | Out-Null
+-try {
+-  Move-Item -Path "$TMP_DOWNLOAD_DIR/$MAVEN_HOME_NAME" -Destination $MAVEN_HOME_PARENT | Out-Null
+-} catch {
+-  if (! (Test-Path -Path "$MAVEN_HOME" -PathType Container)) {
+-    Write-Error "fail to move MAVEN_HOME"
+-  }
+-} finally {
+-  try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+-  catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+-}
+-
+-Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+diff --git a/pom.xml b/pom.xml
+deleted file mode 100644
+index 0956dc44610ba9041a48602665f439d473ff6141..0000000000000000000000000000000000000000
+--- a/pom.xml
++++ /dev/null
+@@ -1,518 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-    <modelVersion>4.0.0</modelVersion>
+-    <groupId>org.yaml</groupId>
+-    <artifactId>snakeyaml</artifactId>
+-    <version>2.8-SNAPSHOT</version>
+-    <packaging>bundle</packaging>
+-    <properties>
+-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+-        <project.scm.id>codeberg</project.scm.id>
+-        <maven.compiler.source>8</maven.compiler.source>
+-        <maven.compiler.target>8</maven.compiler.target>
+-        <maven.compiler.release>8</maven.compiler.release>
+-        <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
+-        <maven-bundle-plugin.version>5.1.8</maven-bundle-plugin.version>
+-        <maven-resources-plugin.version>3.1.0</maven-resources-plugin.version><!-- for Github CI -->
+-        <maven-site-plugin.version>3.12.1</maven-site-plugin.version>
+-        <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
+-        <jdk11-illegal-access-level>deny</jdk11-illegal-access-level>
+-        <jmh.version>1.36</jmh.version>
+-    </properties>
+-    <name>SnakeYAML</name>
+-    <description>YAML 1.1 parser and emitter for Java</description>
+-    <inceptionYear>2008</inceptionYear>
+-    <url>https://codeberg.org/snakeyaml/snakeyaml</url>
+-    <issueManagement>
+-        <system>codeberg</system>
+-        <url>https://codeberg.org/snakeyaml/snakeyaml/issues</url>
+-    </issueManagement>
+-    <mailingLists>
+-        <mailingList>
+-            <name>SnakeYAML developers and users List</name>
+-            <post>snakeyaml-core@googlegroups.com</post>
+-        </mailingList>
+-    </mailingLists>
+-    <scm>
+-        <connection>scm:git:https://codeberg.org/snakeyaml/snakeyaml</connection>
+-        <developerConnection>scm:git:ssh://git@codeberg.org/snakeyaml/snakeyaml</developerConnection>
+-        <url>https://codeberg.org/snakeyaml/snakeyaml/src</url>
+-        <tag>HEAD</tag>
+-    </scm>
+-    <licenses>
+-        <license>
+-            <name>Apache License, Version 2.0</name>
+-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+-            <distribution>repo</distribution>
+-        </license>
+-    </licenses>
+-    <developers>
+-        <developer>
+-            <id>asomov</id>
+-            <name>Andrey Somov</name>
+-            <email>public.somov@gmail.com</email>
+-        </developer>
+-        <developer>
+-            <id>maslovalex</id>
+-            <name>Alexander Maslov</name>
+-            <email>alexander.maslov@gmail.com</email>
+-        </developer>
+-    </developers>
+-    <dependencies>
+-        <dependency>
+-            <groupId>junit</groupId>
+-            <artifactId>junit</artifactId>
+-            <version>4.13.2</version>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.apache.velocity</groupId>
+-            <artifactId>velocity-engine-core</artifactId>
+-            <version>2.3</version>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>joda-time</groupId>
+-            <artifactId>joda-time</artifactId>
+-            <version>2.11.1</version>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.projectlombok</groupId>
+-            <artifactId>lombok</artifactId>
+-            <version>1.18.42</version>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>com.fasterxml.jackson.dataformat</groupId>
+-            <artifactId>jackson-dataformat-yaml</artifactId>
+-            <version>2.18.1</version>
+-            <exclusions>
+-                <exclusion>
+-                    <groupId>org.yaml</groupId>
+-                    <artifactId>snakeyaml</artifactId>
+-                </exclusion>
+-            </exclusions>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.openjdk.jmh</groupId>
+-            <artifactId>jmh-core</artifactId>
+-            <version>${jmh.version}</version>
+-            <scope>test</scope>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.openjdk.jmh</groupId>
+-            <artifactId>jmh-generator-annprocess</artifactId>
+-            <version>${jmh.version}</version>
+-            <scope>test</scope>
+-        </dependency>
+-    </dependencies>
+-    <build>
+-        <testResources>
+-            <testResource>
+-                <directory>${basedir}/src/test/resources</directory>
+-                <filtering>true</filtering>
+-            </testResource>
+-        </testResources>
+-        <pluginManagement>
+-            <plugins>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-resources-plugin</artifactId>
+-                    <version>${maven-resources-plugin.version}</version>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-javadoc-plugin</artifactId>
+-                    <version>3.4.1</version>
+-                    <configuration>
+-                        <excludePackageNames>org.yaml.snakeyaml.external.*</excludePackageNames>
+-                    </configuration>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-site-plugin</artifactId>
+-                    <version>${maven-site-plugin.version}</version>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-jar-plugin</artifactId>
+-                    <version>3.2.2</version>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-compiler-plugin</artifactId>
+-                    <version>3.10.1</version>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.codehaus.mojo</groupId>
+-                    <artifactId>build-helper-maven-plugin</artifactId>
+-                    <version>3.3.0</version>
+-                </plugin>
+-                <plugin>
+-                    <groupId>org.apache.maven.plugins</groupId>
+-                    <artifactId>maven-surefire-plugin</artifactId>
+-                    <version>${maven-surefire-plugin.version}</version>
+-                    <configuration>
+-                        <environmentVariables>
+-                            <EnvironmentKey1>EnvironmentValue1</EnvironmentKey1>
+-                            <EnvironmentEmpty />
+-                        </environmentVariables>
+-                    </configuration>
+-                </plugin>
+-            </plugins>
+-        </pluginManagement>
+-        <plugins>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-enforcer-plugin</artifactId>
+-                <version>3.1.0</version>
+-                <executions>
+-                    <execution>
+-                        <id>enforce-maven</id>
+-                        <goals>
+-                            <goal>enforce</goal>
+-                        </goals>
+-                        <configuration>
+-                            <rules>
+-                                <requireMavenVersion>
+-                                    <version>3.3.0</version>
+-                                </requireMavenVersion>
+-                            </rules>
+-                        </configuration>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-compiler-plugin</artifactId>
+-                <configuration>
+-                    <encoding>${project.build.sourceEncoding}</encoding>
+-                </configuration>
+-                <executions>
+-                    <execution>
+-                        <id>module-info-compile</id>
+-                        <goals><goal>compile</goal></goals>
+-                        <configuration>
+-                            <release>9</release>
+-                            <compileSourceRoots>${project.basedir}/src/main/java9</compileSourceRoots>
+-                            <multiReleaseOutput>true</multiReleaseOutput>
+-                              <jdkToolchain>
+-                                <version>[11,)</version>
+-                              </jdkToolchain>
+-                        </configuration>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-surefire-plugin</artifactId>
+-                <configuration>
+-                    <argLine>-Xmx512m</argLine>
+-                    <includes>
+-                        <include>**/*Test.java</include>
+-                    </includes>
+-                    <excludes>
+-                        <exclude>**/StressTest.java</exclude>
+-                        <exclude>**/ParallelTest.java</exclude>
+-                    </excludes>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-eclipse-plugin</artifactId>
+-                <version>2.10</version>
+-                <configuration>
+-                    <buildOutputDirectory>bin</buildOutputDirectory>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-changes-plugin</artifactId>
+-                <version>2.12.1</version>
+-                <executions>
+-                    <execution>
+-                        <id>validate-changes</id>
+-                        <phase>pre-site</phase>
+-                        <goals>
+-                            <goal>changes-validate</goal>
+-                        </goals>
+-                        <configuration>
+-                            <failOnError>true</failOnError>
+-                        </configuration>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-source-plugin</artifactId>
+-                <version>3.2.1</version>
+-                <executions>
+-                    <execution>
+-                        <goals>
+-                            <goal>jar-no-fork</goal>
+-                        </goals>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-javadoc-plugin</artifactId>
+-                <version>3.4.1</version>
+-                <executions>
+-                    <execution>
+-                        <id>attach-javadocs</id>
+-                        <goals>
+-                            <goal>jar</goal>
+-                        </goals>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>pw.krejci</groupId>
+-                <artifactId>jmh-maven-plugin</artifactId>
+-                <version>0.2.2</version>
+-                <configuration>
+-                    <resultFormat>json</resultFormat>
+-                    <resultsFile>${project.build.directory}/jmh-result.json</resultsFile>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-                <groupId>com.mycila.maven-license-plugin</groupId>
+-                <artifactId>maven-license-plugin</artifactId>
+-                <version>1.10.b1</version>
+-                <configuration>
+-                    <header>src/etc/header.txt</header>
+-                    <quiet>false</quiet>
+-                    <failIfMissing>true</failIfMissing>
+-                    <aggregate>false</aggregate>
+-                    <includes>
+-                        <include>src/**/*.java</include>
+-                    </includes>
+-                    <excludes>
+-                        <exclude>src/main/java/org/yaml/snakeyaml/external/**</exclude>
+-                    </excludes>
+-                    <useDefaultExcludes>true</useDefaultExcludes>
+-                    <useDefaultMapping>true</useDefaultMapping>
+-                    <strictCheck>true</strictCheck>
+-                    <encoding>UTF-8</encoding>
+-                </configuration>
+-                <executions>
+-                    <execution>
+-                        <phase>site</phase>
+-                        <goals>
+-                            <goal>format</goal>
+-                        </goals>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.felix</groupId>
+-                <artifactId>maven-bundle-plugin</artifactId>
+-                <version>${maven-bundle-plugin.version}</version>
+-                <extensions>true</extensions>
+-                <configuration>
+-                    <instructions>
+-                        <_nouses>true</_nouses>
+-                        <Export-Package>
+-                            !org.yaml.snakeyaml.external*,
+-                            org.yaml.snakeyaml.*;version=${project.version}
+-                        </Export-Package>
+-                        <Multi-Release>true</Multi-Release>
+-                    </instructions>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-                <artifactId>maven-site-plugin</artifactId>
+-                <version>${maven-site-plugin.version}</version>
+-                <executions>
+-                    <execution>
+-                        <id>attach-descriptor</id>
+-                        <goals>
+-                            <goal>attach-descriptor</goal>
+-                        </goals>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-release-plugin</artifactId>
+-                <version>2.5.3</version>
+-                <configuration>
+-                    <autoVersionSubmodules>true</autoVersionSubmodules>
+-                    <useReleaseProfile>false</useReleaseProfile>
+-                    <releaseProfiles>release</releaseProfiles>
+-                    <goals>deploy</goals>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-              <groupId>org.sonatype.central</groupId>
+-              <artifactId>central-publishing-maven-plugin</artifactId>
+-              <version>0.7.0</version>
+-              <extensions>true</extensions>
+-              <configuration>
+-                <publishingServerId>snakeyaml-central</publishingServerId>
+-              </configuration>
+-            </plugin>
+-            <plugin>
+-                <groupId>net.revelc.code.formatter</groupId>
+-                <artifactId>formatter-maven-plugin</artifactId>
+-                <version>2.20.0</version>
+-                <executions>
+-                    <execution>
+-                        <goals>
+-                            <goal>format</goal>
+-                        </goals>
+-                        <configuration>
+-                            <configFile>src/etc/eclipse-java-google-style.xml</configFile>
+-                            <encoding>UTF-8</encoding>
+-                        </configuration>
+-                    </execution>
+-                </executions>
+-            </plugin>
+-        </plugins>
+-    </build>
+-    <reporting>
+-        <plugins>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-changes-plugin</artifactId>
+-                <version>2.12.1</version>
+-                <reportSets>
+-                    <reportSet>
+-                        <reports>
+-                            <report>changes-report</report>
+-                        </reports>
+-                    </reportSet>
+-                </reportSets>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-surefire-report-plugin</artifactId>
+-                <version>${maven-surefire-plugin.version}</version>
+-                <configuration>
+-                    <showSuccess>true</showSuccess>
+-                </configuration>
+-            </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-javadoc-plugin</artifactId>
+-                <reportSets>
+-                    <reportSet>
+-                        <id>html</id>
+-                        <configuration>
+-                            <doctitle>API for ${project.name} ${project.version}</doctitle>
+-                            <windowtitle>API for ${project.name} ${project.version}</windowtitle>
+-                            <testDoctitle>Test API for ${project.name} ${project.version}</testDoctitle>
+-                            <testWindowtitle>Test API for ${project.name} ${project.version}</testWindowtitle>
+-                        </configuration>
+-                        <reports>
+-                            <report>javadoc</report>
+-                        </reports>
+-                    </reportSet>
+-                </reportSets>
+-            </plugin>
+-        </plugins>
+-    </reporting>
+-    <profiles>
+-        <profile>
+-            <!-- -proc:full requires JDK 21+. It keeps annotation processing (JMH) enabled for
+-                 the tests, which recent JDKs no longer do implicitly. -->
+-            <id>jdk21-annotation-processing</id>
+-            <activation>
+-                <jdk>[21,)</jdk>
+-            </activation>
+-            <build>
+-                <plugins>
+-                    <plugin>
+-                        <groupId>org.apache.maven.plugins</groupId>
+-                        <artifactId>maven-compiler-plugin</artifactId>
+-                        <executions>
+-                            <execution>
+-                                <id>default-testCompile</id>
+-                                <configuration>
+-                                    <proc>full</proc>
+-                                </configuration>
+-                            </execution>
+-                        </executions>
+-                    </plugin>
+-                </plugins>
+-            </build>
+-        </profile>
+-        <profile>
+-            <id>with-java11-tests</id>
+-            <properties>
+-                <maven.compiler.testSource>11</maven.compiler.testSource>
+-                <maven.compiler.testTarget>11</maven.compiler.testTarget>
+-                <maven.compiler.testRelease>11</maven.compiler.testRelease>
+-            </properties>
+-            <build>
+-                <plugins>
+-                    <plugin>
+-                        <groupId>org.apache.maven.plugins</groupId>
+-                        <artifactId>maven-surefire-plugin</artifactId>
+-                        <configuration>
+-                            <argLine>--illegal-access=${jdk11-illegal-access-level} -Xmx512m</argLine>
+-                        </configuration>
+-                    </plugin>
+-                    <plugin>
+-                        <groupId>org.apache.maven.plugins</groupId>
+-                        <artifactId>maven-compiler-plugin</artifactId>
+-                        <configuration>
+-                            <compilerArgs>
+-                                <arg>-Xlint:deprecation</arg>
+-                            </compilerArgs>
+-                        </configuration>
+-                    </plugin>
+-                    <plugin>
+-                        <groupId>org.codehaus.mojo</groupId>
+-                        <artifactId>build-helper-maven-plugin</artifactId>
+-                        <executions>
+-                            <execution>
+-                                <id>add-java11-test-source</id>
+-                                <phase>generate-test-sources</phase>
+-                                <goals>
+-                                    <goal>add-test-source</goal>
+-                                </goals>
+-                                <configuration>
+-                                    <sources>
+-                                        <source>${basedir}/src/test/java8/</source>
+-                                        <source>${basedir}/src/test/java11/</source>
+-                                    </sources>
+-                                </configuration>
+-                            </execution>
+-                        </executions>
+-                    </plugin>
+-                </plugins>
+-            </build>
+-        </profile>
+-        <profile>
+-            <id>release</id>
+-            <activation>
+-                <property>
+-                    <name>performRelease</name>
+-                    <value>true</value>
+-                </property>
+-            </activation>
+-            <build>
+-                <plugins>
+-                    <plugin>
+-                        <groupId>org.apache.maven.plugins</groupId>
+-                        <artifactId>maven-gpg-plugin</artifactId>
+-                        <version>3.0.1</version>
+-                        <executions>
+-                            <execution>
+-                                <id>sign-artifacts</id>
+-                                <phase>verify</phase>
+-                                <goals>
+-                                    <goal>sign</goal>
+-                                </goals>
+-                            </execution>
+-                        </executions>
+-                    </plugin>
+-                </plugins>
+-            </build>
+-        </profile>
+-    </profiles>
+-</project>
+diff --git a/run-in-docker.sh b/run-in-docker.sh
+deleted file mode 100755
+index 131533c662985c84903c75a8592ef4d58bcee031..0000000000000000000000000000000000000000
+--- a/run-in-docker.sh
++++ /dev/null
+@@ -1,9 +0,0 @@
+-#!/usr/bin/env bash
+-
+-docker run --rm -it               \
+-    -v `pwd`:/work                \
+-    -v ~:/my-home                 \
+-    -e "HOME=/my-home"            \
+-    -w /work                      \
+-    $1                            \
+-    ./mvnw -Dmaven.repo.local=/my-home/.m2/repository clean install site -Pwith-java11-tests ${@:2}
