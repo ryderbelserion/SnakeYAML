@@ -27,4 +27,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Publish SnakeYAML
-        run: gradle publish
+        run: gradle snakeyaml-target:publish -x test
