@@ -3,6 +3,8 @@ plugins {
     `java-plugin`
 }
 
+rootProject.version = rootProject.property("version") as String
+
 val path = projectDir.resolve("src")
 
 patcher {
