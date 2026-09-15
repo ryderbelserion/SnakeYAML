@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ryder Belserion <contact@ryderbelserion.com>
+Date: Tue, 15 Sep 2026 11:47:43 -0400
+Subject: [PATCH] Emit block sequence comments before the indicator
+
+This does make comments on a sequence ambiguous with comments on the
+first element of the sequence. I don't think there's anything we can
+do about that though.... needs more thought i suppose
+
+diff --git a/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java b/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
+index 4fcfdb9973a3f1cf2ad77a56c573f0d54c502095..323fa044c837a8f506ed16881c735ec6e74f488f 100644
+--- a/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
++++ b/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
+@@ -759,6 +759,9 @@ public final class Emitter implements Emitable {
+           writeBlockComment();
+         }
+       } else {
++        if (!blockCommentsCollector.isEmpty()) {
++          writeBlockComment();
++        }
+         writeIndent();
+         if (!indentWithIndicator || this.first) {
+           writeWhitespace(indicatorIndent);
+diff --git a/src/test/java/org/yaml/snakeyaml/comment/EmitterWithCommentEnabledTest.java b/src/test/java/org/yaml/snakeyaml/comment/EmitterWithCommentEnabledTest.java
+index 644968561ba3099010c3c92c5fe0b86486d6c6c5..b2419adf8595166399a19c77795c25a9b525b44b 100644
+--- a/src/test/java/org/yaml/snakeyaml/comment/EmitterWithCommentEnabledTest.java
++++ b/src/test/java/org/yaml/snakeyaml/comment/EmitterWithCommentEnabledTest.java
+@@ -160,8 +160,8 @@ public class EmitterWithCommentEnabledTest {
+     String data = "" + //
+         "# Comment\n" + //
+         "list: # InlineComment1\n" + //
+-        "  - # Block Comment\n" + //
+-        "    item # InlineComment2\n" + //
++        "  # Block Comment\n" + //
++        "  - item # InlineComment2\n" + //
+         "# Comment\n";
+ 
+     String result = runEmitterWithCommentsEnabled(data);
+@@ -199,8 +199,8 @@ public class EmitterWithCommentEnabledTest {
+         "# Block Comment4\n" + //
+         "list: # InlineComment3a\n" + //
+         "      # InlineComment3b\n" + //
+-        "  - # Block Comment5\n" + //
+-        "    item1 # InlineComment4\n" + //
++        "  # Block Comment5\n" + //
++        "  - item1 # InlineComment4\n" + //
+         "  - item2: [value2a, value2b] # InlineComment5\n" + //
+         "  - item3: {key3a: [value3a1, value3a2], key3b: value3b} # InlineComment6\n" + //
+         "# Block Comment6\n" + //
+@@ -229,12 +229,12 @@ public class EmitterWithCommentEnabledTest {
+   @Test
+   public void testAllComments2() throws Exception {
+     String data = "" + //
+-        "key:\n" + "  key:\n" + "    key:\n" + "    - # Block Comment1\n" + "      item1a\n"
+-        + "    - # Block Comment2\n" + "    - item1b\n" + "    - # Block Comment3\n"
++        "key:\n" + "  key:\n" + "    key:\n" + "    # Block Comment1\n" + "    - item1a\n"
++        + "    # Block Comment2\n" + "    -\n" + "    - item1b\n" + "    - # Block Comment3\n"
+         + "      MapKey_1: MapValue1\n" + "      MapKey_2: MapValue2\n" + "key2:\n"
+-        + "- # Block Comment4\n" + //
+-        "  # Block Comment5\n" + //
+-        "  item1 # Inline Comment1a\n" + //
++        + "# Block Comment4\n" + //
++        "# Block Comment5\n" + //
++        "- item1 # Inline Comment1a\n" + //
+         "        # Inline Comment1b\n" + //
+         "- # Block Comment6a\n" + //
+         "  # Block Comment6b\n" + //

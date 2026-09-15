@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ryder Belserion <contact@ryderbelserion.com>
+Date: Tue, 15 Sep 2026 11:45:55 -0400
+Subject: [PATCH] Initial implementation of tab acceptance
+
+
+diff --git a/src/main/java/org/yaml/snakeyaml/LoaderOptions.java b/src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+index 5441801bcdf227872b6c570fabd3f7f9152a4626..b621375115d98652e84976c54a476c31b6577b3a 100644
+--- a/src/main/java/org/yaml/snakeyaml/LoaderOptions.java
++++ b/src/main/java/org/yaml/snakeyaml/LoaderOptions.java
+@@ -34,6 +34,8 @@ public class LoaderOptions {
+ 
+   private boolean processComments = false;
+ 
++  private boolean acceptTabs = false;
++
+   private boolean enumCaseSensitive = true;
+ 
+   private int nestingDepthLimit = 50;
+@@ -183,6 +185,31 @@ public class LoaderOptions {
+     return this;
+   }
+ 
++  /**
++   * Set the scanner to accept tabs.
++   *
++   * <p>
++   * This mode is disabled by default, since tabs are not valid in a YAML document. However, when
++   * working with user-generated input it can be beneficial to attempt to process tabs.
++   * </p>
++   *
++   * <p>
++   * When tabs are accepted, each tab is treated as <em>one space.</em>
++   * </p>
++   *
++   * @param acceptTabs whether tabs should be accepted
++   * @return this
++   */
++  public LoaderOptions setAcceptTabs(final boolean acceptTabs) {
++    this.acceptTabs = acceptTabs;
++
++    return this;
++  }
++
++  public boolean isAcceptTabs() {
++    return this.acceptTabs;
++  }
++
+   /**
+    * getter
+    *
+diff --git a/src/main/java/org/yaml/snakeyaml/scanner/ScannerImpl.java b/src/main/java/org/yaml/snakeyaml/scanner/ScannerImpl.java
+index 31184eed2e53c7245b5f5b383d738a6ba85d105f..352061b74c5e1da3d424800118055aa11a414689 100644
+--- a/src/main/java/org/yaml/snakeyaml/scanner/ScannerImpl.java
++++ b/src/main/java/org/yaml/snakeyaml/scanner/ScannerImpl.java
+@@ -216,11 +216,14 @@ public final class ScannerImpl implements Scanner {
+    */
+   private final Map<Integer, SimpleKey> possibleSimpleKeys;
+ 
++  private final boolean acceptTabs;
++
+   public ScannerImpl(StreamReader reader, LoaderOptions options) {
+     if (options == null) {
+       throw new NullPointerException("LoaderOptions must be provided.");
+     }
+     this.parseComments = options.isProcessComments();
++    this.acceptTabs = options.isAcceptTabs();
+     this.reader = reader;
+     this.tokens = new ArrayList<Token>(100);
+     this.indents = new ArrayStack<Integer>(10);
+@@ -1228,7 +1231,7 @@ public final class ScannerImpl implements Scanner {
+       int ff = 0;
+       // Peek ahead until we find the first non-space character, then
+       // move forward directly to that character.
+-      while (reader.peek(ff) == ' ') {
++      while (reader.peek(ff) == ' ' || (this.acceptTabs && this.reader.peek(ff) == '\t')) { // Configurate
+         ff++;
+       }
+       while (reader.peek(ff) == '\t' && this.flowLevel > 0) {
+diff --git a/src/test/java/org/yaml/snakeyaml/scanner/ScannerImplTest.java b/src/test/java/org/yaml/snakeyaml/scanner/ScannerImplTest.java
+index 6cd53edb684a0c5cdd5a891e1b1e4d9abe4760ca..7fea753192a14b73cc5636bf3e47d550ccb547e4 100644
+--- a/src/test/java/org/yaml/snakeyaml/scanner/ScannerImplTest.java
++++ b/src/test/java/org/yaml/snakeyaml/scanner/ScannerImplTest.java
+@@ -64,4 +64,17 @@ public class ScannerImplTest extends TestCase {
+           + " in 'string', line 1, column 1:\n" + "    \t  data: 1\n" + "    ^\n", e.getMessage());
+     }
+   }
++
++  public void testTabsAllowed() {
++    // TODO: Test mixed tabs and spaces once those are properly handled
++    final Scanner scanner =
++            new ScannerImpl(new StreamReader("\tdata: 1"), new LoaderOptions().setAcceptTabs(true));
++    final Token.ID[] expectedTokens = {Token.ID.StreamStart, Token.ID.BlockMappingStart,
++            Token.ID.Key, Token.ID.Scalar, Token.ID.Value, Token.ID.Scalar, Token.ID.BlockEnd,};
++
++    int expected = 0;
++    do {
++      assertEquals(expectedTokens[expected++], scanner.getToken().getTokenId());
++    } while (!scanner.checkToken(Token.ID.StreamEnd));
++  }
+ }

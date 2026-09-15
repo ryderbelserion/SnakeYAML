@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ryder Belserion <contact@ryderbelserion.com>
+Date: Tue, 15 Sep 2026 11:48:04 -0400
+Subject: [PATCH] fix: Avoid emitting unnecessary whitespace with comments
+
+
+diff --git a/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java b/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
+index 323fa044c837a8f506ed16881c735ec6e74f488f..f12478156edf1b710ff4677cad6edca777ae11b6 100644
+--- a/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
++++ b/src/main/java/org/yaml/snakeyaml/emitter/Emitter.java
+@@ -1369,6 +1369,10 @@ public final class Emitter implements Emitable {
+   }
+ 
+   void writeIndent() throws IOException {
++    this.writeIndent(true);
++  }
++
++  void writeIndent(boolean actualIndent) throws IOException {
+     int indent;
+     if (this.indent != null) {
+       indent = this.indent;
+@@ -1380,7 +1384,8 @@ public final class Emitter implements Emitable {
+       writeLineBreak(null);
+     }
+ 
+-    writeWhitespace(indent - this.column);
++    if (actualIndent)
++      writeWhitespace(indent - this.column);
+   }
+ 
+   private void writeWhitespace(int length) throws IOException {
+@@ -1574,7 +1579,8 @@ public final class Emitter implements Emitable {
+     writeIndicator("\"", false, false, false);
+   }
+ 
+-  private boolean writeCommentLines(List<CommentLine> commentLines) throws IOException {
++  private boolean writeCommentLines(List<CommentLine> commentLines, boolean extraIndent)
++      throws IOException {
+     boolean wroteComment = false;
+     if (emitComments) {
+       int indentColumns = 0;
+@@ -1583,6 +1589,8 @@ public final class Emitter implements Emitable {
+         if (commentLine.getCommentType() != CommentType.BLANK_LINE) {
+           if (firstComment) {
+             firstComment = false;
++            if (extraIndent)
++              writeIndent();
+             writeIndicator("#", commentLine.getCommentType() == CommentType.IN_LINE, false, false);
+             indentColumns = this.column > 0 ? this.column - 1 : 0;
+           } else {
+@@ -1593,7 +1601,7 @@ public final class Emitter implements Emitable {
+           writeLineBreak(null);
+         } else {
+           writeLineBreak(null);
+-          writeIndent();
++          writeIndent(false);
+         }
+         wroteComment = true;
+       }
+@@ -1603,8 +1611,8 @@ public final class Emitter implements Emitable {
+ 
+   private void writeBlockComment() throws IOException {
+     if (!blockCommentsCollector.isEmpty()) {
+-      writeIndent();
+-      writeCommentLines(blockCommentsCollector.consume());
++      writeIndent(false);
++      writeCommentLines(blockCommentsCollector.consume(), true);
+       if (!prettyFlow && flowLevel > 0) {
+         prettyFlow = true;
+         requiredPrettyFlowLevel++;
+@@ -1613,7 +1621,7 @@ public final class Emitter implements Emitable {
+   }
+ 
+   private boolean writeInlineComments() throws IOException {
+-    return writeCommentLines(inlineCommentsCollector.consume());
++    return writeCommentLines(inlineCommentsCollector.consume(), false);
+   }
+ 
+   private String determineBlockHints(String text) {
