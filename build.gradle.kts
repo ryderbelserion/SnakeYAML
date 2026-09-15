@@ -4,6 +4,7 @@ plugins {
 }
 
 rootProject.version = rootProject.property("version") as String
+rootProject.group = rootProject.property("group") as String
 
 val path = projectDir.resolve("src")
 
