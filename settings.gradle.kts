@@ -1,7 +1,5 @@
 rootProject.name = "SnakeYAML"
 
-includeProject("src/target" to "target")
-
 fun includeProject(pair: Pair<String, String>): Unit = includeProject(pair.first, pair.second)
 
 fun includeProject(name: String, block: ProjectDescriptor.() -> Unit) {
@@ -20,4 +18,8 @@ fun includeProject(name: String) {
     includeProject(name) {
         this.name = "${rootProject.name.lowercase()}-$name"
     }
+}
+
+if (file("src/target").exists()) {
+    includeProject("src/target" to "target")
 }

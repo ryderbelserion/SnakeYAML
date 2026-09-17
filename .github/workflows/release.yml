@@ -26,10 +26,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Setup Project
+        run: gradle create
+
       - name: Setup Upstream
-        run: |
-          gradle start
-          gradle apply
+        run: gradle clone
+
+      - name: Apply Patches
+        run: gradle apply
 
       - name: Publish Project
         run: gradle snakeyaml-target:publish -x test

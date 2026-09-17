@@ -1,7 +1,7 @@
 [versions]
 ## Gradle Plugins
 fix-javadoc = "1.19" # https://github.com/mfnalex/gradle-fix-javadoc-plugin
-feather = "0.8.1" # https://github.com/ryderbelserion/Feather
+feather = "0.8.2" # https://github.com/ryderbelserion/Feather
 shadow = "9.6.1" # https://github.com/GradleUp/shadow
 
 #### Publishing Link
