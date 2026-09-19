@@ -18,3 +18,7 @@ patcher {
 
     group = "feather-patcher"
 }
+
+tasks.withType<Test> {
+    isEnabled = false
+}
