@@ -1,4 +1,4 @@
-rootProject.name = "SnakeYAML"
+rootProject.name = "snakeyaml-parent"
 
 fun includeProject(pair: Pair<String, String>): Unit = includeProject(pair.first, pair.second)
 
@@ -9,17 +9,17 @@ fun includeProject(name: String, block: ProjectDescriptor.() -> Unit) {
 
 fun includeProject(path: String, name: String) {
     includeProject(name) {
-        this.name = "${rootProject.name.lowercase()}-$name"
         this.projectDir = File(path)
+        this.name = name
     }
 }
 
 fun includeProject(name: String) {
     includeProject(name) {
-        this.name = "${rootProject.name.lowercase()}-$name"
+        this.name = name
     }
 }
 
 if (file("src/target").exists()) {
-    includeProject("src/target" to "target")
+    includeProject("src/target" to "snakeyaml")
 }
